@@ -5,9 +5,9 @@ class EntriesProcessor:
 
     def __init__(self, max_value_len=20, max_context_len=20):
         self.uniq_symbols = set()
-        self.symbols_dict = {'<PAD>': 0, '<UNK>': 1}
-        self.symbols_dict_rev = {0: '<PAD>', 1: 'UNK'}
-        self.symbols_counter = 2
+        self.symbols_dict = {'<PAD>': 0, '<EOS>' : 1, '<UNK>': 2 }
+        self.symbols_dict_rev = {0: '<PAD>', 1: '<EOS>', 2 : '<UNK>'}
+        self.symbols_counter = 3
         self.X_data = None
         self.y_data = None
         self.MAX_VALUE_LEN = max_value_len
@@ -30,9 +30,9 @@ class EntriesProcessor:
         contexts = []
         values = []
         for entry in entries:
-            if len(entry.value) <= self.MAX_VALUE_LEN and len(entry.context) <= self.MAX_CONTEXT_LEN:
-                contexts.append(list(map(lambda x: self.symbols_dict[x], entry.context.lower())))
-                values.append(list(map(lambda x: self.symbols_dict[x], entry.value.lower())))
+            if len(entry.value) <= self.MAX_VALUE_LEN - 1 and len(entry.context) <= self.MAX_CONTEXT_LEN - 1:
+                contexts.append(list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
+                values.append(list(map(lambda x: self.symbols_dict[x], entry.value.lower()))+ [self.symbols_dict['<EOS>']])
         assert len(contexts) == len(values)
 
         self.X_data = np.zeros((len(contexts), self.MAX_CONTEXT_LEN))
