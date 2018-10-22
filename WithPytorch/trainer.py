@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 class Trainer:
     def __init__(self, encoder, decoder, entries, teacher_forcing_ratio = 0.5, learning_rate=0.01,
-                 max_input_length = 20, max_output_length = 40):
+                 max_input_length = 40, max_output_length = 20):
         self.encoder = encoder
         self.decoder = decoder
         self.entries = entries
@@ -29,7 +29,7 @@ class Trainer:
         assert input_tensor.size(1) == output_tensor.size(1)
         batch_size = input_tensor.size(1)
         loss = 0
-        encoder_hidden = self.encoder.init_hidden()
+        encoder_hidden = self.encoder.init_hidden(batch_size)
         # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
         encoder_outputs = torch.zeros(self.max_input_length, *encoder_hidden.size())
         for input_item in range(input_length):
@@ -38,7 +38,7 @@ class Trainer:
             )
             encoder_outputs[input_item] = encoder_hidden
 
-        decoder_input = torch.ones(1, batch_size, 1) * self.entries.symbols_dict['<PAD>']
+        decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long) * self.entries.symbols_dict['<PAD>']
         decoder_hidden = self.decoder.init_hidden(batch_size)
         use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
         if use_teacher_forcing:
@@ -62,4 +62,7 @@ class Trainer:
         return loss.item() / ( output_length * batch_size )
 
     def test_training(self):
-        pass
+        BATCH_SIZE = 10
+        input_tensor = torch.ones(self.max_input_length, BATCH_SIZE, 1, dtype=torch.long)
+        output_tensor = torch.ones(self.max_output_length, BATCH_SIZE, 1, dtype=torch.long)
+        self.train_on_batch(input_tensor, output_tensor)

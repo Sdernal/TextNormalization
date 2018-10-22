@@ -4,6 +4,10 @@ import numpy as np
 class EntriesProcessor:
 
     def __init__(self, max_value_len=20, max_context_len=20):
+        """
+        :param max_value_len: max length of normalized entity
+        :param max_context_len: max length of context window
+        """
         self.uniq_symbols = set()
         self.symbols_dict = {'<PAD>': 0, '<EOS>' : 1, '<UNK>': 2 }
         self.symbols_dict_rev = {0: '<PAD>', 1: '<EOS>', 2 : '<UNK>'}
