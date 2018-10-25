@@ -46,15 +46,19 @@ class Trainer:
                 decoder_output, decoder_hidden, decoder_attn = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs
                 )
-                loss += self.criterion(decoder_output, output_tensor[output_item])
-                decoder_input = output_tensor[output_item]
+                true_output = output_tensor[output_item]
+                loss += self.criterion(decoder_output, true_output)
+                decoder_input = true_output
+                decoder_input = decoder_input.view(1, batch_size, 1)
         else:
             for output_item in range(output_length):
                 decoder_output, decoder_hidden, decoder_attention = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs)
                 topv, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze().detach()
-                loss += self.criterion(decoder_output, output_tensor[output_item])
+                decoder_input = decoder_input.view(1, batch_size, 1)
+                true_output = output_tensor[output_item]
+                loss += self.criterion(decoder_output, true_output)
         loss.backward()
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
@@ -64,5 +68,5 @@ class Trainer:
     def test_training(self):
         BATCH_SIZE = 10
         input_tensor = torch.ones(self.max_input_length, BATCH_SIZE, 1, dtype=torch.long)
-        output_tensor = torch.ones(self.max_output_length, BATCH_SIZE, 1, dtype=torch.long)
+        output_tensor = torch.ones(self.max_output_length, BATCH_SIZE, dtype=torch.long)
         self.train_on_batch(input_tensor, output_tensor)
