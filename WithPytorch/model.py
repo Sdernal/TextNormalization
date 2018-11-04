@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Encoder(nn.Module):
-    def __init__(self, input_size, hidden_size, embedding_size):
+    def __init__(self, input_size, hidden_size, embedding_size, device=None):
         '''
         :param input_size:
         :param hidden_size:
@@ -14,6 +14,11 @@ class Encoder(nn.Module):
         self.embedding = nn.Embedding(input_size, embedding_size)
         self.gru = nn.GRU(embedding_size, hidden_size, bidirectional=True)
 
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+
     def forward(self, input, hidden):
         # input shape( batch_size, 1)
         batch_size = input.size(0)
@@ -22,14 +27,14 @@ class Encoder(nn.Module):
         return output, hidden
 
     def init_hidden(self, batch_size):
-        return torch.zeros(2, batch_size, self.hidden_size )
+        return torch.zeros(2, batch_size, self.hidden_size, device=self.device )
 
 
 class Decoder(nn.Module):
     """
     Decoder with attention
     """
-    def __init__(self, hidden_size, embedding_size, output_size, max_length):
+    def __init__(self, hidden_size, embedding_size, output_size, max_length, device=None):
         '''
         :param hidden_size:
         :param embedding_size:
@@ -40,7 +45,10 @@ class Decoder(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.max_length = max_length
-
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
         self.embedding = nn.Embedding(self.output_size, embedding_size)
         self.attn = nn.Linear(hidden_size + embedding_size, max_length)
         self.attn_combine = nn.Linear(hidden_size * 2 + embedding_size, hidden_size)
@@ -67,8 +75,8 @@ class Decoder(nn.Module):
         bmm_batch1 = attn_weights.unsqueeze(1)
         bmm_batch2 = encoder_outputs.view(batch_size, self.max_length, -1)
         attn_applied = torch.bmm(bmm_batch1,bmm_batch2)
-        attn_applied = attn_applied.squeeze() # (batch_size, hidden_size * 2)
-        embedded = embedded.squeeze() # (batch_size, embedding_size )
+        attn_applied = attn_applied.squeeze(dim=1) # (batch_size, hidden_size * 2)
+        embedded = embedded.squeeze(dim=0) # (batch_size, embedding_size )
         output = torch.cat((embedded, attn_applied),1) # (batch_size, hidden_size * 2 + embedding_size)
         output = self.attn_combine(output).unsqueeze(0) # (1, batch_size, hidden_size)
         output = F.relu(output)
@@ -78,4 +86,4 @@ class Decoder(nn.Module):
         return output, hidden, attn_weights
 
     def init_hidden(self, batch_size):
-        return torch.zeros(1, batch_size, self.hidden_size)
+        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
