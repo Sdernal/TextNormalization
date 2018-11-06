@@ -29,6 +29,9 @@ class Encoder(nn.Module):
     def init_hidden(self, batch_size):
         return torch.zeros(2, batch_size, self.hidden_size, device=self.device )
 
+    def output_shape(self, batch_size):
+        return (1, batch_size, self.hidden_size * 2)
+
 
 class Decoder(nn.Module):
     """
@@ -73,7 +76,9 @@ class Decoder(nn.Module):
         )
         # shapes (batch_size, 1, max_len ) @ (batch_size, max_len, hidden_size * 2) = (batch_size, 1, hidden_size * 2)
         bmm_batch1 = attn_weights.unsqueeze(1)
-        bmm_batch2 = encoder_outputs.view(batch_size, self.max_length, -1)
+        bmm_batch2 = encoder_outputs.squeeze(dim=1)
+        bmm_batch2 = bmm_batch2.transpose(0, 1)
+        # bmm_batch2 = encoder_outputs.view(batch_size, self.max_length, -1)
         attn_applied = torch.bmm(bmm_batch1,bmm_batch2)
         attn_applied = attn_applied.squeeze(dim=1) # (batch_size, hidden_size * 2)
         embedded = embedded.squeeze(dim=0) # (batch_size, embedding_size )

@@ -41,12 +41,12 @@ class Trainer:
         loss = 0
         encoder_hidden = self.encoder.init_hidden(batch_size)
         # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
-        encoder_outputs = torch.zeros(self.max_input_length, *encoder_hidden.size(), device=self.device)
+        encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size), device=self.device)
         for input_item in range(input_length):
             encoder_output, encoder_hidden = self.encoder(
                 input_tensor[input_item], encoder_hidden
             )
-            encoder_outputs[input_item] = encoder_hidden
+            encoder_outputs[input_item] = encoder_output
 
         decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict['<PAD>']
         decoder_hidden = self.decoder.init_hidden(batch_size)
@@ -84,12 +84,12 @@ class Trainer:
             loss = 0
             encoder_hidden = self.encoder.init_hidden(batch_size)
             # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
-            encoder_outputs = torch.zeros(self.max_input_length, *encoder_hidden.size(), device=self.device)
+            encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size), device=self.device)
             for input_item in range(input_length):
                 encoder_output, encoder_hidden = self.encoder(
                     input_tensor[input_item], encoder_hidden
                 )
-                encoder_outputs[input_item] = encoder_hidden
+                encoder_outputs[input_item] = encoder_output
 
             decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict['<PAD>']
             decoder_hidden = self.decoder.init_hidden(batch_size)
@@ -125,12 +125,12 @@ class Trainer:
             loss = 0
             encoder_hidden = self.encoder.init_hidden(batch_size)
             # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
-            encoder_outputs = torch.zeros(self.max_input_length, *encoder_hidden.size(), device=self.device)
+            encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size), device=self.device)
             for input_item in range(input_length):
                 encoder_output, encoder_hidden = self.encoder(
                     input_tensor[input_item], encoder_hidden
                 )
-                encoder_outputs[input_item] = encoder_hidden
+                encoder_outputs[input_item] = encoder_output
 
             decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict['<PAD>']
             decoder_hidden = self.decoder.init_hidden(batch_size)
@@ -156,7 +156,7 @@ class Trainer:
         output_tensor = torch.ones(self.max_output_length, BATCH_SIZE, dtype=torch.long, device=self.device)
         self.train_on_batch(input_tensor, output_tensor)
 
-    def iteate_batches(self, batch_size=256, is_train=True):
+    def iteate_batches(self, batch_size=100, is_train=True):
 
         n_samples = self.entries.X_data.shape[0]
         n_samples = int(0.9 * n_samples)
@@ -179,8 +179,8 @@ class Trainer:
             end = min(start + batch_size, n_samples)
             batch_idx = indices[start:end]
 
-            X_batch = X_data[batch_idx, ]
-            Y_batch = Y_data[batch_idx, ]
+            X_batch = X_data[batch_idx, ].T
+            Y_batch = Y_data[batch_idx, ].T
 
             X_batch = torch.from_numpy(X_batch)
             Y_batch = torch.from_numpy(Y_batch)
@@ -196,14 +196,14 @@ class Trainer:
 
             yield Variable(X_batch), Variable(Y_batch)
 
-    def train_epoch(self):
+    def train_epoch(self,  batch_size=100):
         '''
         Train on dataset for one epoch
         :return: None
         '''
         train_count, train_loss = 0, 0
         start_time = time.time()
-        for i, (x_batch, y_batch) in enumerate(self.iteate_batches()):
+        for i, (x_batch, y_batch) in enumerate(self.iteate_batches(batch_size=batch_size)):
             loss = self.train_on_batch(x_batch, y_batch)
             train_loss += loss
             train_count = i + 1
@@ -212,10 +212,10 @@ class Trainer:
         print()
         return train_loss / train_count
 
-    def test_epoch(self):
+    def test_epoch(self,  batch_size=100):
         test_count, test_loss = 0, 0
         start_time = time.time()
-        for i, (x_batch, y_batch) in enumerate(self.iteate_batches(is_train=False)):
+        for i, (x_batch, y_batch) in enumerate(self.iteate_batches(batch_size=batch_size, is_train=False)):
             loss = self.test_on_batch(x_batch, y_batch)
             test_loss += loss
             test_count = i + 1
@@ -223,14 +223,14 @@ class Trainer:
         print('\tTest Loss: %6f \t Time: %ds' % (test_loss / test_count, current_time - start_time))
         return test_loss / test_count
 
-    def train(self, num_epoches):
+    def train(self, num_epoches, batch_size=100):
         print()
         train_losses = []
         test_losses = []
         for epoch in range(1,num_epoches + 1):
             print('Epoch %d' % (epoch))
-            train_losses.append(self.train_epoch())
-            test_losses.append(self.test_epoch())
+            train_losses.append(self.train_epoch(batch_size))
+            test_losses.append(self.test_epoch(batch_size))
             for _ in range(5):
                 print('\t Input: %s \t Result: %s \t From train: %d' % self.evaluate_sample())
 
