@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import time
+from dataloader import distance
 
 from entriesprocessor import EntriesProcessor
 import numpy as np
@@ -105,12 +106,40 @@ class Trainer:
 
             return loss.item() / (output_length)
 
-    def evaluate_sample(self):
+    def test_model(self, from_train=True):
+        if from_train:
+            X_data = self.entries.X_data_train
+            Y_data = self.entries.y_data_train
+        else:
+            X_data = self.entries.X_data_test
+            Y_data = self.entries.y_data_test
+
+        n_samples = X_data.shape[0]
+        ethalons = []
+        results = []
+        inputs = []
+        matched = []
+        distances = []
+        for i in range(n_samples):
+            input, result = self.evaluate_sample(X_data[i:i+1])
+
+            ethalon = Y_data[i:i+1]
+            ethalon = [self.entries.symbols_dict_rev[ethalon[0][i]] for i in range(ethalon.shape[1])]
+            ethalon = filter(lambda x: len(x) == 1, ethalon)
+            ethalon = ''.join(ethalon)
+
+            ethalons.append(ethalon)
+            results.append(result)
+            inputs.append(input)
+            matched.append(ethalon == result)
+            distances.append(distance(result, ethalon))
+
+        return ethalons, results, inputs, matched, distances
+
+
+    def evaluate_sample(self, data):
         with torch.no_grad():
-            n_samples = self.entries.X_data.shape[0]
-            train_max = int(n_samples * 0.9)
-            item = random.randint(0, n_samples - 2)
-            data = self.entries.X_data[item:item+1]
+            # data = self.entries.X_data[item:item+1]
             input = [self.entries.symbols_dict_rev[data[0][i]] for i in range(data.shape[1])]
             input = filter(lambda x: len(x) == 1, input)
             input = ''.join(input)
@@ -148,7 +177,7 @@ class Trainer:
                 if len(result_symbol) == 1:
                     result += result_symbol
 
-            return input, result, item < train_max
+            return input, result
 
     def test_training(self):
         BATCH_SIZE = 10
@@ -157,20 +186,16 @@ class Trainer:
         self.train_on_batch(input_tensor, output_tensor)
 
     def iteate_batches(self, batch_size=100, is_train=True):
-
-        n_samples = self.entries.X_data.shape[0]
-        n_samples = int(0.9 * n_samples)
-        X_data, Y_data = None, None
         if is_train:
-            X_data = self.entries.X_data[:n_samples]
-            Y_data = self.entries.y_data[:n_samples]
+            X_data = self.entries.X_data_train
+            Y_data = self.entries.y_data_train
         else:
-            X_data = self.entries.X_data[n_samples:]
-            Y_data = self.entries.y_data[n_samples:]
+            X_data = self.entries.X_data_test
+            Y_data = self.entries.y_data_test
 
         n_samples = X_data.shape[0]
-        x_len = self.entries.X_data.shape[1]
-        y_len = self.entries.y_data.shape[1]
+        x_len = X_data.shape[1]
+        y_len = Y_data.shape[1]
 
         indices = np.arange(n_samples)
         np.random.shuffle(indices)
@@ -231,8 +256,6 @@ class Trainer:
             print('Epoch %d' % (epoch))
             train_losses.append(self.train_epoch(batch_size))
             test_losses.append(self.test_epoch(batch_size))
-            for _ in range(5):
-                print('\t Input: %s \t Result: %s \t From train: %d' % self.evaluate_sample())
 
         return train_losses, test_losses
 
