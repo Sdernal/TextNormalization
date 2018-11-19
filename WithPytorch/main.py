@@ -13,7 +13,7 @@ loader = DataLoader(10)
 loader.parse_person_corpus(abspath('../Persons-1000/collection'))
 loader.parse_rdf_corpus(abspath('../../corpus_for_pakhomov_2'))
 
-ep = EntriesProcessor(20,40)
+ep = EntriesProcessor(20,40,10)
 ep.process(loader.entries)
 voc_size = ep.symbols_counter
 

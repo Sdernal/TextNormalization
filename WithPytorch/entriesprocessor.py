@@ -1,16 +1,17 @@
 # import dataloader
 import numpy as np
 
+
 class EntriesProcessor:
 
-    def __init__(self, max_value_len=20, max_context_len=20):
+    def __init__(self, max_value_len=20, max_context_len=40, window_size=10):
         """
         :param max_value_len: max length of normalized entity
         :param max_context_len: max length of context window
         """
         self.uniq_symbols = set()
-        self.symbols_dict = {'<PAD>': 0, '<EOS>' : 1, '<UNK>': 2 }
-        self.symbols_dict_rev = {0: '<PAD>', 1: '<EOS>', 2 : '<UNK>'}
+        self.symbols_dict = {'<PAD>': 0, '<EOS>': 1, '<SOS>': 2, '<UNK>': 3}
+        self.symbols_dict_rev = {0: '<PAD>', 1: '<EOS>', 2: '<SOS>', 3: '<UNK>'}
         self.symbols_counter = 3
         self.X_data_train = None
         self.y_data_train = None
@@ -18,8 +19,9 @@ class EntriesProcessor:
         self.y_data_test = None
         self.MAX_VALUE_LEN = max_value_len
         self.MAX_CONTEXT_LEN = max_context_len
+        self.WINDOW_SIZE = window_size
 
-    def process(self, entries, train_ratio = 0.9):
+    def process(self, entries, train_ratio=0.9):
         for entry in entries:
             self.uniq_symbols |= set(entry.value.lower())
             self.uniq_symbols |= set(entry.context.lower())
@@ -41,12 +43,17 @@ class EntriesProcessor:
         train_contexts, train_values = [], []
         test_contexts, test_values = [], []
         for entry in entries:
-            if len(entry.value) <= self.MAX_VALUE_LEN - 1 and len(entry.context) <= self.MAX_CONTEXT_LEN - 1:
+            if len(entry.value) <= self.MAX_VALUE_LEN - 3 and len(entry.context) <= self.MAX_CONTEXT_LEN - 3:
+                left_paddings_count = self.WINDOW_SIZE - (entry.offset - entry.context_offset)
                 if entry.value in uniq_train_values:
-                    train_contexts.append(list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
-                    train_values.append(list(map(lambda x: self.symbols_dict[x], entry.value.lower()))+ [self.symbols_dict['<EOS>']])
+                    train_contexts.append(
+                        [self.symbols_dict['<PAD>']] * (left_paddings_count + 1) + [self.symbols_dict['<SOS>']] +
+                        list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
+                    train_values.append(
+                        list(map(lambda x: self.symbols_dict[x], entry.value.lower())) + [self.symbols_dict['<EOS>']])
                 else:
                     test_contexts.append(
+                        [self.symbols_dict['<PAD>']] * (left_paddings_count + 1) + [self.symbols_dict['<SOS>']] +
                         list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
                     test_values.append(
                         list(map(lambda x: self.symbols_dict[x], entry.value.lower())) + [self.symbols_dict['<EOS>']])

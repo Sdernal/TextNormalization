@@ -37,7 +37,7 @@ class Decoder(nn.Module):
     """
     Decoder with attention
     """
-    def __init__(self, hidden_size, embedding_size, output_size, max_length, device=None):
+    def __init__(self, hidden_size, embedding_size, output_size, max_length, dropout_p = 0.1, device=None):
         '''
         :param hidden_size:
         :param embedding_size:
@@ -57,6 +57,7 @@ class Decoder(nn.Module):
         self.attn_combine = nn.Linear(hidden_size * 2 + embedding_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, input, hidden, encoder_outputs):
         """
@@ -69,7 +70,7 @@ class Decoder(nn.Module):
         # enocoder_outputs_len shape(max_len, hidden_size * 2)
         batch_size = input.size(1)
         embedded = self.embedding(input).view(1, batch_size, -1)
-        # dropout
+        embedded = self.dropout(embedded)
         # shape (batch_size, max_len)
         attn_weights = F.softmax(
             self.attn(torch.cat((embedded[0], hidden[0]),1)), dim=1
