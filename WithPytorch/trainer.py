@@ -179,6 +179,49 @@ class Trainer:
 
             return input, result
 
+
+    def evaluate_with_attn(self, data):
+        with torch.no_grad():
+            # data = self.entries.X_data[item:item+1]
+            input = [self.entries.symbols_dict_rev[data[0][i]] for i in range(data.shape[1])]
+
+            data = torch.from_numpy(data)
+            data = data.type(torch.LongTensor)
+            data = data.to(self.device)
+            data = data.view(-1, 1, 1)
+            input_tensor = Variable(data)
+
+            input_length = input_tensor.size(0)
+            batch_size = input_tensor.size(1)
+            loss = 0
+            encoder_hidden = self.encoder.init_hidden(batch_size)
+            # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
+            encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size), device=self.device)
+            for input_item in range(input_length):
+                encoder_output, encoder_hidden = self.encoder(
+                    input_tensor[input_item], encoder_hidden
+                )
+                encoder_outputs[input_item] = encoder_output
+
+            decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict['<PAD>']
+            decoder_hidden = self.decoder.init_hidden(batch_size)
+
+            result = []
+            attentions = torch.zeros(self.max_output_length, self.max_input_length)
+
+            for output_item in range(self.max_output_length):
+                decoder_output, decoder_hidden, decoder_attn = self.decoder(
+                    decoder_input, decoder_hidden, encoder_outputs
+                )
+                attentions[output_item] = decoder_attn.squeeze().data
+                topv, topi = decoder_output.topk(1)
+                decoder_input = topi.squeeze().detach()
+                decoder_input = decoder_input.view(1, batch_size, 1)
+                result_symbol = self.entries.symbols_dict_rev[decoder_input.view(1).item()]
+                result.append(result_symbol)
+
+            return input, result, attentions
+
     def test_training(self):
         BATCH_SIZE = 10
         input_tensor = torch.ones(self.max_input_length, BATCH_SIZE, 1, dtype=torch.long, device=self.device)

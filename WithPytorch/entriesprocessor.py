@@ -43,20 +43,19 @@ class EntriesProcessor:
         train_contexts, train_values = [], []
         test_contexts, test_values = [], []
         for entry in entries:
-            if len(entry.value) <= self.MAX_VALUE_LEN - 3 and len(entry.context) <= self.MAX_CONTEXT_LEN - 3:
-                left_paddings_count = self.WINDOW_SIZE - (entry.offset - entry.context_offset)
-                if entry.value in uniq_train_values:
-                    train_contexts.append(
-                        [self.symbols_dict['<PAD>']] * (left_paddings_count + 1) + [self.symbols_dict['<SOS>']] +
-                        list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
-                    train_values.append(
-                        list(map(lambda x: self.symbols_dict[x], entry.value.lower())) + [self.symbols_dict['<EOS>']])
-                else:
-                    test_contexts.append(
-                        [self.symbols_dict['<PAD>']] * (left_paddings_count + 1) + [self.symbols_dict['<SOS>']] +
-                        list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
-                    test_values.append(
-                        list(map(lambda x: self.symbols_dict[x], entry.value.lower())) + [self.symbols_dict['<EOS>']])
+            left_paddings_count = self.WINDOW_SIZE - (entry.offset - entry.context_offset)
+            context = ([self.symbols_dict['<PAD>']] * (left_paddings_count + 1) + [self.symbols_dict['<SOS>']] +
+                       list(map(lambda x: self.symbols_dict[x], entry.context.lower())) + [self.symbols_dict['<EOS>']])
+            value = (list(map(lambda x: self.symbols_dict[x], entry.value.lower())) + [self.symbols_dict['<EOS>']])
+            if len(context) > self.MAX_CONTEXT_LEN or len(value) > self.MAX_VALUE_LEN:
+                continue
+
+            if entry.value in uniq_train_values:
+                train_contexts.append(context)
+                train_values.append(value)
+            else:
+                test_contexts.append(context)
+                test_values.append(value)
 
         assert len(train_contexts) == len(train_values)
         assert len(test_contexts) == len(test_values)
