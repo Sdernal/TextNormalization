@@ -138,9 +138,10 @@ class DecoderCRF(nn.Module):
         self.transitions = nn.Parameter(
             torch.randn(self.output_size, self.output_size)
         )
+        # TODO: do smth with sos and eos initialisation
         # <SOS> - 2; <EOS> - 1
-        self.transitions.data[START_OF_SENTENCE, :] = -10000
-        self.transitions.data[:, END_OF_SENTENCE] = -10000
+        # self.transitions.data[START_OF_SENTENCE, :] = -10000
+        # self.transitions.data[:, END_OF_SENTENCE] = -10000
 
     def forward(self, input, hidden, encoder_outputs):
         """
@@ -174,36 +175,49 @@ class DecoderCRF(nn.Module):
         # output = F.log_softmax(output, dim=1)
         return output, hidden, attn_weights
 
+    def output_shape(self, batch_size):
+        return (batch_size, self.output_size)
+
+    def init_hidden(self, batch_size):
+        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
+
+    # CRF stuff:
+    def neg_log_likelihood(self, decoder_feats, targets):
+        forward_score = self._forward_alg(decoder_feats)
+        gold_score = self._score_sentence(decoder_feats, targets)
+        return forward_score - gold_score
+
     def _forward_alg(self, feats):
         init_alphas = torch.full((1, self.output_size), -10000.)
-        init_alphas[0][START_OF_SENTENCE] = 0.
+        # TODO: sos initialistion
+        # init_alphas[0][START_OF_SENTENCE] = 0.
 
         forward_var = torch.Variable(init_alphas)
 
         for feat in feats:
             alphas_t = []
             for next_tag in range(self.output_size):
-                emit_score = feat[next_tag].veiw(
-                    1, -1).expand(1, self.output_size)
+                emit_score = feat[next_tag].veiw(1, -1).expand(1, self.output_size)
                 trans_score = self.transitions[next_tag].view(1, -1)
                 next_tag_var = forward_var + trans_score + emit_score
                 alphas_t.append(log_sum_exp(next_tag_var).view(1))
             forward_var = torch.cat(alphas_t).view(1, -1)
-        terminal_var = forward_var + self.transitions[END_OF_SENTENCE]
+
+        terminal_var = forward_var # TODO: + self.transitions[END_OF_SENTENCE]
         alpha = log_sum_exp(terminal_var)
         return alpha
 
-
-
     def _score_sentence(self, feats, targets):
-        #TODO: continue CRF realisation
+        score = torch.zeros(1)
+        for i, feat in enumerate(feats):
+            score = score + self.transitions[targets[i+1], targets[i]] + feat[targets[i+1]]
+        # TODO: use the terminal symbol in score
+        return score
+
+    def _viterbi_decode(self, feats):
+        # TODO: realize
         pass
 
-    def neg_log_likelihood(self, decoder_feats, targets):
-        forward_score = self._forward_alg(decoder_feats)
-        gold_score = self._score_sentence(decoder_feats, targets)
-        return forward_score -
 
 
-    def init_hidden(self, batch_size):
-        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
+
