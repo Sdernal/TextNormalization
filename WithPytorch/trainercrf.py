@@ -77,3 +77,5 @@ class TrainerCRF:
         self.decoder_optimizer.step()
 
         return loss.item() / ( output_length )
+
+
