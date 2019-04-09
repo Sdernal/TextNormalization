@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchcrf import CRF
 
 START_OF_SENTENCE = 2
 END_OF_SENTENCE = 1
@@ -219,5 +220,72 @@ class DecoderCRF(nn.Module):
         pass
 
 
+class DecoderPythonCRF(nn.Module):
+    '''
+    Decoder with python crf unit
+    '''
+    def __init__(self, hidden_size, embedding_size, output_size, max_length, dropout_p = 0.1, device=None):
+        '''
+        :param hidden_size:
+        :param embedding_size:
+        :param outpus_size:
+        :param max_length:
+        '''
+        super(DecoderPythonCRF, self).__init__()
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.max_length = max_length
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = device
+        self.embedding = nn.Embedding(self.output_size, embedding_size)
+        self.attn = nn.Linear(hidden_size + embedding_size, max_length)
+        self.attn_combine = nn.Linear(hidden_size * 2 + embedding_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size)
+        self.out = nn.Linear(hidden_size, output_size)
+        self.dropout = nn.Dropout(dropout_p)
+        self.crf = CRF(output_size)
 
+    def step(self, input, hidden, encoder_outputs):
+        batch_size = input.size(1)
+        embedded = self.embedding(input).view(1, batch_size, -1)
+        embedded = self.dropout(embedded)
+        # shape (batch_size, max_len)
+        attn_weights = F.softmax(
+            self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1
+        )
+        # shapes (batch_size, 1, max_len ) @ (batch_size, max_len, hidden_size * 2) = (batch_size, 1, hidden_size * 2)
+        bmm_batch1 = attn_weights.unsqueeze(1)
+        bmm_batch2 = encoder_outputs.squeeze(dim=1)
+        bmm_batch2 = bmm_batch2.transpose(0, 1)
+        # bmm_batch2 = encoder_outputs.view(batch_size, self.max_length, -1)
+        attn_applied = torch.bmm(bmm_batch1, bmm_batch2)
+        attn_applied = attn_applied.squeeze(dim=1)  # (batch_size, hidden_size * 2)
+        embedded = embedded.squeeze(dim=0)  # (batch_size, embedding_size )
+        output = torch.cat((embedded, attn_applied), 1)  # (batch_size, hidden_size * 2 + embedding_size)
+        output = self.attn_combine(output).unsqueeze(0)  # (1, batch_size, hidden_size)
+        output = F.relu(output)
+        output, hidden = self.gru(output, hidden)
+        output = self.out(output[0])
+        output = F.log_softmax(output, dim=1)
+        return output, hidden, attn_weights
 
+    def forward(self, decoder_input, output_tensor, encoder_outputs):
+        output_length = output_tensor.size(0)
+        batch_size = decoder_input.size(1)
+        decoder_hidden = self.init_hidden(batch_size)
+        decoder_outputs = torch.zeros(output_length, batch_size, self.output_size)
+        for output_item in range(output_length):
+            decoder_output, decoder_hidden, decoder_attn = self.step(
+                decoder_input, decoder_hidden, encoder_outputs
+            )
+            true_output = output_tensor[output_item]
+            decoder_input = true_output
+            decoder_input = decoder_input.view(1, batch_size, 1)
+            decoder_outputs[output_item] = decoder_output
+        res = self.crf(decoder_outputs, output_tensor)
+        return res
+
+    def init_hidden(self, batch_size):
+        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)

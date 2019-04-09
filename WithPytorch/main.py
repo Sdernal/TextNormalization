@@ -2,7 +2,8 @@ from dataloader import DataLoader, distance
 from os.path import abspath
 from entriesprocessor import EntriesProcessor
 from trainer import Trainer
-from model import Decoder, Encoder
+from trainerpytorchcrf import TrainerPythonCRF
+from model import Decoder, Encoder, DecoderPythonCRF
 import torch
 import re
 import numpy as np
@@ -57,9 +58,10 @@ voc_size = ep.symbols_counter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 encoder = Encoder(input_size=voc_size, hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE).to(device)
-decoder = Decoder(hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE, output_size=voc_size, max_length=40).to(device)
-trainer = Trainer(encoder,decoder,ep,max_input_length=40, max_output_length=20)
-
+# decoder = Decoder(hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE, output_size=voc_size, max_length=40).to(device)
+decoder = DecoderPythonCRF(hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE, )
+# trainer = Trainer(encoder,decoder,ep,max_input_length=40, max_output_length=20)
+trainer = TrainerPythonCRF(encoder, )
 trainer.train(1, batch_size=256)
 a,b,c = trainer.evaluate_with_attn(ep.X_data_train[1:2])
 print('kek')
