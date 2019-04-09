@@ -23,7 +23,7 @@ trainer = TrainerPythonCRF(encoder, decoder, ep, max_input_length=40, max_output
 trainer.train(1, batch_size=10)
 # a,b,c = trainer.evaluate_with_attn(ep.X_data_train[1:2])
 print('kek')
-# ethalons, results, inputs, matched, distances = trainer.test_model(False)
+ethalons, results, inputs, matched, distances = trainer.test_model(False)
 # print(np.mean(matched))
 # print(np.mean(distances))
 # print(inputs[:10])

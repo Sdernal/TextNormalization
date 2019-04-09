@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchcrf import CRF
+import random
 
 START_OF_SENTENCE = 2
 END_OF_SENTENCE = 1
@@ -224,7 +225,8 @@ class DecoderPythonCRF(nn.Module):
     '''
     Decoder with python crf unit
     '''
-    def __init__(self, hidden_size, embedding_size, output_size, max_length, dropout_p = 0.1, device=None):
+    def __init__(self, hidden_size, embedding_size, output_size, max_length, dropout_p = 0.1,
+                 teacher_forcing_ratio = 0.5, device=None):
         '''
         :param hidden_size:
         :param embedding_size:
@@ -245,6 +247,7 @@ class DecoderPythonCRF(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)
+        self.teacher_forcing_ratio = teacher_forcing_ratio
         self.crf = CRF(output_size)
 
     def step(self, input, hidden, encoder_outputs):
@@ -275,17 +278,43 @@ class DecoderPythonCRF(nn.Module):
         output_length = output_tensor.size(0)
         batch_size = decoder_input.size(1)
         decoder_hidden = self.init_hidden(batch_size)
-        decoder_outputs = torch.zeros(output_length, batch_size, self.output_size)
-        for output_item in range(output_length):
-            decoder_output, decoder_hidden, decoder_attn = self.step(
-                decoder_input, decoder_hidden, encoder_outputs
-            )
-            true_output = output_tensor[output_item]
-            decoder_input = true_output
-            decoder_input = decoder_input.view(1, batch_size, 1)
-            decoder_outputs[output_item] = decoder_output
+        decoder_outputs = torch.zeros(output_length, batch_size, self.output_size, device=self.device)
+
+        use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+        if use_teacher_forcing:
+            for output_item in range(output_length):
+                decoder_output, decoder_hidden, decoder_attn = self.step(
+                    decoder_input, decoder_hidden, encoder_outputs
+                )
+                true_output = output_tensor[output_item]
+                decoder_input = true_output
+                decoder_input = decoder_input.view(1, batch_size, 1)
+                decoder_outputs[output_item] = decoder_output
+
+        else:
+            for output_item in range(output_length):
+                decoder_output, decoder_hidden, decoder_attention = self.step(
+                    decoder_input, decoder_hidden, encoder_outputs)
+                topv, topi = decoder_output.topk(1)
+                decoder_input = topi.squeeze().detach()
+                decoder_input = decoder_input.view(1, batch_size, 1)
+                decoder_outputs[output_item] = decoder_output
         res = self.crf(decoder_outputs, output_tensor)
         return res
+
+    def predict(self, decoder_input, encoder_outputs, max_output_length):
+        output_length = max_output_length
+        batch_size = decoder_input.size(1)
+        decoder_hidden = self.init_hidden(batch_size)
+        decoder_outputs = torch.zeros(output_length, batch_size, self.output_size, device=self.device)
+        for output_item in range(output_length):
+            decoder_output, decoder_hidden, decoder_attention = self.step(
+                decoder_input, decoder_hidden, encoder_outputs)
+            topv, topi = decoder_output.topk(1)
+            decoder_input = topi.squeeze().detach()
+            decoder_input = decoder_input.view(1, batch_size, 1)
+            decoder_outputs[output_item] = decoder_output
+        return self.crf.decode(decoder_outputs)
 
     def init_hidden(self, batch_size):
         return torch.zeros(1, batch_size, self.hidden_size, device=self.device)

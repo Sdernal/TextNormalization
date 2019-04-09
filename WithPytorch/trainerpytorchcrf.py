@@ -6,6 +6,7 @@ from model import DecoderPythonCRF, Encoder
 from torch.autograd import Variable
 import numpy as np
 import time
+from dataloader import distance
 
 
 class TrainerPythonCRF:
@@ -118,4 +119,67 @@ class TrainerPythonCRF:
             print('\r\tTrain Loss: %6f \t Time: %ds' % (train_loss / train_count, current_time - start_time), end='')
         print()
         return train_loss / train_count
+
+    def test_model(self, from_train=True):
+        if from_train:
+            X_data = self.entries.X_data_train
+            Y_data = self.entries.y_data_train
+        else:
+            X_data = self.entries.X_data_test
+            Y_data = self.entries.y_data_test
+
+        n_samples = X_data.shape[0]
+        ethalons = []
+        results = []
+        inputs = []
+        matched = []
+        distances = []
+
+        for i in range(n_samples):
+            input, result = self.evaluate_sample(X_data[i:i + 1])
+
+            result = result[0]
+            ethalon = Y_data[i:i + 1]
+            result = [self.entries.symbols_dict_rev[result[i]] for i in range(len(result))]
+            ethalon = [self.entries.symbols_dict_rev[ethalon[0][i]] for i in range(ethalon.shape[1])]
+            ethalon = filter(lambda x: len(x) == 1, ethalon)
+            ethalon = ''.join(ethalon)
+
+            ethalons.append(ethalon)
+            results.append(result)
+            inputs.append(input)
+            matched.append(ethalon == result)
+            distances.append(distance(result, ethalon))
+
+        return ethalons, results, inputs, matched, distances
+
+    def evaluate_sample(self, data):
+        with torch.no_grad():
+            # data = self.entries.X_data[item:item+1]
+            input = [self.entries.symbols_dict_rev[data[0][i]] for i in range(data.shape[1])]
+            input = filter(lambda x: len(x) == 1, input)
+            input = ''.join(input)
+            data = torch.from_numpy(data)
+            data = data.type(torch.LongTensor)
+            data = data.to(self.device)
+            data = data.view(-1, 1, 1)
+            input_tensor = Variable(data)
+
+            input_length = input_tensor.size(0)
+            batch_size = input_tensor.size(1)
+            loss = 0
+            encoder_hidden = self.encoder.init_hidden(batch_size)
+            # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
+            encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size),
+                                          device=self.device)
+            for input_item in range(input_length):
+                encoder_output, encoder_hidden = self.encoder(
+                    input_tensor[input_item], encoder_hidden
+                )
+                encoder_outputs[input_item] = encoder_output
+
+            decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * \
+                            self.entries.symbols_dict['<PAD>']
+
+            return input, self.decoder.predict(decoder_input, encoder_outputs, self.max_output_length)
 
