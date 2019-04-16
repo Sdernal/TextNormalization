@@ -33,7 +33,6 @@ class TrainerPythonCRF:
         '''
         self.encoder_optimizer.zero_grad()
         self.decoder_optimizer.zero_grad()
-
         input_length = input_tensor.size(0)
         output_length = output_tensor.size(0)
         assert input_tensor.size(1) == output_tensor.size(1)
@@ -55,7 +54,7 @@ class TrainerPythonCRF:
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
 
-        return loss.item() / ( output_length )
+        return loss.item()
 
     def train(self, num_epoches, batch_size=100):
         print()
@@ -120,7 +119,7 @@ class TrainerPythonCRF:
         print()
         return train_loss / train_count
 
-    def test_model(self, from_train=True):
+    def test_model(self, from_train=True, n_samples = None):
         if from_train:
             X_data = self.entries.X_data_train
             Y_data = self.entries.y_data_train
@@ -128,7 +127,7 @@ class TrainerPythonCRF:
             X_data = self.entries.X_data_test
             Y_data = self.entries.y_data_test
 
-        n_samples = X_data.shape[0]
+        n_samples = X_data.shape[0] if n_samples is None else min(n_samples, X_data.shape[0])
         ethalons = []
         results = []
         inputs = []
@@ -164,7 +163,6 @@ class TrainerPythonCRF:
             data = data.to(self.device)
             data = data.view(-1, 1, 1)
             input_tensor = Variable(data)
-
             input_length = input_tensor.size(0)
             batch_size = input_tensor.size(1)
             loss = 0
