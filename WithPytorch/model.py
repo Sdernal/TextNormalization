@@ -274,15 +274,15 @@ class DecoderPythonCRF(nn.Module):
         # output = F.log_softmax(output, dim=1)
         return output, hidden, attn_weights
 
-    def forward(self, decoder_input, output_tensor, encoder_outputs):
+    def forward(self, decoder_input, output_tensor, encoder_outputs, is_test=False):
         output_length = output_tensor.size(0)
         batch_size = decoder_input.size(1)
         decoder_hidden = self.init_hidden(batch_size)
         decoder_outputs = torch.zeros(output_length, batch_size, self.output_size, device=self.device)
 
-        mask = (output_tensor != 0)
+        # mask = (output_tensor != 0)
 
-        use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
+        use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio or is_test else False
         if use_teacher_forcing:
             for output_item in range(output_length):
                 decoder_output, decoder_hidden, decoder_attn = self.step(
@@ -301,7 +301,7 @@ class DecoderPythonCRF(nn.Module):
                 decoder_input = topi.squeeze().detach()
                 decoder_input = decoder_input.view(1, batch_size, 1)
                 decoder_outputs[output_item] = decoder_output
-        res = self.crf(decoder_outputs, output_tensor,mask, reduction='mean')
+        res = self.crf(decoder_outputs, output_tensor, reduction='mean')
         return res
 
     def predict(self, decoder_input, encoder_outputs, max_output_length):

@@ -16,8 +16,8 @@ class TrainerPythonCRF:
         self.decoder = decoder
         self.entries = entries
         self.teacher_forcing_ratio = teacher_forcing_ratio
-        self.encoder_optimizer = optim.SGD(encoder.parameters(), lr = learning_rate)
-        self.decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
+        self.encoder_optimizer = optim.Adam(encoder.parameters())
+        self.decoder_optimizer = optim.Adam(decoder.parameters())
         self.max_input_length = max_input_length
         self.max_output_length = max_output_length
         if device is None:
@@ -48,13 +48,34 @@ class TrainerPythonCRF:
             encoder_outputs[input_item] = encoder_output
         decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict[
             '<PAD>']
-        loss = -self.decoder(decoder_input, output_tensor, encoder_outputs)
+        loss = -self.decoder(decoder_input, output_tensor, encoder_outputs )
 
         loss.backward()
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
 
         return loss.item()
+
+    def test_on_batch(self, input_tensor, output_tensor):
+        with torch.no_grad():
+            input_length = input_tensor.size(0)
+            output_length = output_tensor.size(0)
+            assert input_tensor.size(1) == output_tensor.size(1)
+            batch_size = input_tensor.size(1)
+            loss = 0
+            encoder_hidden = self.encoder.init_hidden(batch_size)
+            # encoder_outputs.size() = (max_len, 2, batch_size, hidden_size)
+            encoder_outputs = torch.zeros(self.max_input_length, *self.encoder.output_shape(batch_size),
+                                          device=self.device)
+            for input_item in range(input_length):
+                encoder_output, encoder_hidden = self.encoder(
+                    input_tensor[input_item], encoder_hidden
+                )
+                encoder_outputs[input_item] = encoder_output
+            decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * \
+                            self.entries.symbols_dict['<PAD>']
+            loss = -self.decoder(decoder_input, output_tensor, encoder_outputs, is_test = True)
+            return loss.item()
 
     def train(self, num_epoches, batch_size=100):
         print()
@@ -63,7 +84,7 @@ class TrainerPythonCRF:
         for epoch in range(1,num_epoches + 1):
             print('Epoch %d' % (epoch))
             train_losses.append(self.train_epoch(batch_size))
-            # test_losses.append(self.test_epoch(batch_size))
+            test_losses.append(self.test_epoch(batch_size))
 
         return train_losses, test_losses
 
@@ -118,6 +139,17 @@ class TrainerPythonCRF:
             print('\r\tTrain Loss: %6f \t Time: %ds' % (train_loss / train_count, current_time - start_time), end='')
         print()
         return train_loss / train_count
+
+    def test_epoch(self, batch_size=100):
+        test_count, test_loss = 0, 0
+        start_time = time.time()
+        for i, (x_batch, y_batch) in enumerate(self.iteate_batches(batch_size=batch_size, is_train=False)):
+            loss = self.test_on_batch(x_batch, y_batch)
+            test_loss += loss
+            test_count = i + 1
+        current_time = time.time()
+        print('\tTest Loss: %6f \t Time: %ds' % (test_loss / test_count, current_time - start_time))
+        return test_loss / test_count
 
     def test_model(self, from_train=True, n_samples = None):
         if from_train:
