@@ -16,8 +16,10 @@ class Trainer:
         self.decoder = decoder
         self.entries = entries
         self.teacher_forcing_ratio = teacher_forcing_ratio
-        self.encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
-        self.decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
+        # self.encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
+        # self.decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
+        self.encoder_optimizer = optim.Adam(encoder.parameters())
+        self.decoder_optimizer = optim.Adam(decoder.parameters())
         self.criterion = nn.NLLLoss()
         self.max_input_length = max_input_length
         self.max_output_length = max_output_length
