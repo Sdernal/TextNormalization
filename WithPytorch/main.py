@@ -7,8 +7,22 @@ from model import Decoder, Encoder, DecoderPythonCRF
 import torch
 import re
 import numpy as np
+from mockentries import two_case_entries
 
 
+entries = two_case_entries(1000)
+ep = EntriesProcessor(20, 40, 0)
+ep.process(entries)
+voc_size = ep.symbols_counter
+
+EMBEDDING_SIZE = 10
+HIDDEN_SIZE = 200
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+encoder = Encoder(input_size=voc_size, hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE).to(device)
+decoder = Decoder(hidden_size=HIDDEN_SIZE, embedding_size=EMBEDDING_SIZE, output_size=voc_size, max_length=40).to(device)
+trainer = Trainer(encoder,decoder,ep,max_input_length=40, max_output_length=20)
+trainer.train(10)
+exit(0)
 def words(text):
     wds = filter(lambda x: len(x) > 0, re.split('\.|-| ', text))
     return list(wds)

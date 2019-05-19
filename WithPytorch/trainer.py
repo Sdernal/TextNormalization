@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import time
 from dataloader import distance
-
+from torch.distributions import Categorical
 from entriesprocessor import EntriesProcessor
 import numpy as np
 
@@ -54,7 +54,39 @@ class Trainer:
         decoder_input = torch.ones(1, batch_size, 1, dtype=torch.long, device=self.device) * self.entries.symbols_dict['<PAD>']
         decoder_hidden = self.decoder.init_hidden(batch_size)
         use_teacher_forcing = True if random.random() < self.teacher_forcing_ratio else False
-        if use_teacher_forcing:
+        rl_mode = True if random.random() < 0.33 else False
+        random_seq = torch.zeros(self.max_output_length, batch_size)
+        max_seq = torch.zeros(self.max_output_length, batch_size)
+        if rl_mode:
+            for output_item in range(output_length):
+                decoder_output, decoder_hidden, decoder_attention = self.decoder(
+                    decoder_input, decoder_hidden, encoder_outputs)
+                true_output = output_tensor[output_item]
+                loss += self.criterion(decoder_output, true_output)
+                distr = Categorical(logits=decoder_output)
+                decoder_input = distr.sample().view(1, batch_size, 1)
+                random_seq[output_item] = decoder_input.view(batch_size).detach()
+                topv, topi = decoder_output.topk(1)
+                max_seq[output_item] = topi.squeeze().detach()
+
+            max_seq.transpose_(0, 1)
+            random_seq.transpose_(0, 1)
+            true_seq = output_tensor.squeeze().transpose(0, 1)
+
+            rl_loss = 0
+            for batch_item in range(batch_size):
+                random_sentence = random_seq[batch_item].type(torch.LongTensor).tolist()
+                max_sentence = max_seq[batch_item].type(torch.LongTensor).tolist()
+                true_sentence = true_seq[batch_item].tolist()
+                random_distance = distance(random_sentence, true_sentence)
+                max_distance = distance(max_sentence, true_sentence)
+                rl_loss += (random_distance - max_distance) / len(true_sentence)
+                # print('\r\tRL Loss: %6f' % rl_loss, end='')
+            rl_loss /= batch_size
+            rl_loss += 1
+            loss *= rl_loss
+
+        elif use_teacher_forcing:
             for output_item in range(output_length):
                 decoder_output, decoder_hidden, decoder_attn = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs
@@ -72,6 +104,8 @@ class Trainer:
                 decoder_input = decoder_input.view(1, batch_size, 1)
                 true_output = output_tensor[output_item]
                 loss += self.criterion(decoder_output, true_output)
+
+
         loss.backward()
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
@@ -98,12 +132,12 @@ class Trainer:
             decoder_hidden = self.decoder.init_hidden(batch_size)
 
             for output_item in range(output_length):
-                decoder_output, decoder_hidden, decoder_attn = self.decoder(
-                    decoder_input, decoder_hidden, encoder_outputs
-                )
+                decoder_output, decoder_hidden, decoder_attention = self.decoder(
+                    decoder_input, decoder_hidden, encoder_outputs)
                 true_output = output_tensor[output_item]
                 loss += self.criterion(decoder_output, true_output)
-                decoder_input = true_output
+                topv, topi = decoder_output.topk(1)
+                decoder_input = topi.squeeze().detach()
                 decoder_input = decoder_input.view(1, batch_size, 1)
 
             return loss.item() / (output_length)
@@ -175,6 +209,7 @@ class Trainer:
                 topv, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze().detach()
                 decoder_input = decoder_input.view(1, batch_size, 1)
+
                 result_symbol = self.entries.symbols_dict_rev[decoder_input.view(1).item()]
                 if len(result_symbol) == 1:
                     result += result_symbol
